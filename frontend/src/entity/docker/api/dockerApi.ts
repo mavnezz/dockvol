@@ -2,6 +2,7 @@ import { getApplicationServer } from '../../../constants';
 import RequestOptions from '../../../shared/api/RequestOptions';
 import { apiHelper } from '../../../shared/api/apiHelper';
 import type { Container } from '../models/Container';
+import type { ContainerBackupSummary } from '../models/ContainerBackupSummary';
 import type { CreateBackupRequest } from '../models/CreateBackupRequest';
 import type { SaveVolumeBackupConfigRequest } from '../models/SaveVolumeBackupConfigRequest';
 import type { VolumeBackup } from '../models/VolumeBackup';
@@ -36,6 +37,16 @@ export const dockerApi = {
       true,
     );
     return response.backups ?? [];
+  },
+
+  async getContainerBackupSummaries() {
+    const requestOptions = new RequestOptions();
+    const response = await apiHelper.fetchGetJson<{ containers: ContainerBackupSummary[] }>(
+      `${getApplicationServer()}/api/v1/docker/backed-up-containers`,
+      requestOptions,
+      true,
+    );
+    return response.containers ?? [];
   },
 
   async deleteBackup(id: string) {

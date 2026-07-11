@@ -4,13 +4,28 @@ import {
   DownloadOutlined,
   LockOutlined,
   RollbackOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
-import { App, Button, Checkbox, Popconfirm, Select, Spin, Switch, Table, Tag } from 'antd';
+import {
+  App,
+  Badge,
+  Button,
+  Checkbox,
+  Divider,
+  Popconfirm,
+  Select,
+  Spin,
+  Switch,
+  Table,
+  Tabs,
+  Tag,
+} from 'antd';
 import { useEffect, useState } from 'react';
 
 import {
   type ConsistencyMode,
   type Container,
+  type ContainerBackupSummary,
   type VolumeBackup,
   type VolumeBackupConfig,
   dockerApi,
@@ -55,6 +70,22 @@ const healthCellClass = (backup?: VolumeBackup): string => {
   return 'bg-blue-500';
 };
 
+const relativeTimeFrom = (iso: string): string => {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+};
+
+const stateBadgeStatus = (state: string): 'success' | 'warning' | 'default' => {
+  if (state === 'running') return 'success';
+  if (state === 'paused') return 'warning';
+  return 'default';
+};
+
 export const ContainersComponent = ({ contentHeight, workspace, canManageBackups }: Props) => {
   const { message } = App.useApp();
 
@@ -70,10 +101,22 @@ export const ContainersComponent = ({ contentHeight, workspace, canManageBackups
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [restoringBackupId, setRestoringBackupId] = useState<string | undefined>(undefined);
   const [configs, setConfigs] = useState<VolumeBackupConfig[]>([]);
+  const [backupSummaries, setBackupSummaries] = useState<Map<string, ContainerBackupSummary>>(
+    new Map(),
+  );
 
   const loadBackups = async (containerId: string) => {
     try {
       setBackups(await dockerApi.getBackups(containerId));
+    } catch (e) {
+      message.error((e as Error).message);
+    }
+  };
+
+  const loadBackupSummaries = async () => {
+    try {
+      const summaries = await dockerApi.getContainerBackupSummaries();
+      setBackupSummaries(new Map(summaries.map((summary) => [summary.containerName, summary])));
     } catch (e) {
       message.error((e as Error).message);
     }
@@ -90,14 +133,18 @@ export const ContainersComponent = ({ contentHeight, workspace, canManageBackups
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [discoveredContainers, workspaceStorages, backupConfigs] = await Promise.all([
-        dockerApi.getContainers(),
-        storageApi.getStorages(workspace.id),
-        dockerApi.getConfigs(),
-      ]);
+      const [discoveredContainers, workspaceStorages, backupConfigs, summaries] = await Promise.all(
+        [
+          dockerApi.getContainers(),
+          storageApi.getStorages(workspace.id),
+          dockerApi.getConfigs(),
+          dockerApi.getContainerBackupSummaries(),
+        ],
+      );
       setContainers(discoveredContainers);
       setStorages(workspaceStorages);
       setConfigs(backupConfigs);
+      setBackupSummaries(new Map(summaries.map((summary) => [summary.containerName, summary])));
       setSelectedStorageId((current) => current ?? workspaceStorages[0]?.id);
       if (discoveredContainers.length > 0) {
         selectContainer(discoveredContainers[0]);
@@ -132,6 +179,7 @@ export const ContainersComponent = ({ contentHeight, workspace, canManageBackups
       });
       message.success('Backup created');
       await loadBackups(selectedContainerId);
+      void loadBackupSummaries();
     } catch (e) {
       message.error((e as Error).message);
     }
@@ -158,6 +206,7 @@ export const ContainersComponent = ({ contentHeight, workspace, canManageBackups
       if (selectedContainerId) {
         await loadBackups(selectedContainerId);
       }
+      void loadBackupSummaries();
     } catch (e) {
       message.error((e as Error).message);
     }
@@ -199,6 +248,23 @@ export const ContainersComponent = ({ contentHeight, workspace, canManageBackups
   const selectedContainer = containers.find((container) => container.id === selectedContainerId);
   const selectedConfig = configs.find((config) => config.containerName === selectedContainer?.name);
   const scheduledContainerNames = new Set(configs.map((config) => config.containerName));
+  const sortedContainers = [...containers].sort((a, b) => a.name.localeCompare(b.name));
+  const containerGroups = [
+    {
+      label: 'Running',
+      items: sortedContainers.filter((container) => container.state === 'running'),
+    },
+    {
+      label: 'Paused',
+      items: sortedContainers.filter((container) => container.state === 'paused'),
+    },
+    {
+      label: 'Stopped',
+      items: sortedContainers.filter(
+        (container) => container.state !== 'running' && container.state !== 'paused',
+      ),
+    },
+  ].filter((group) => group.items.length > 0);
 
   const recentBackups = backups.slice(0, HEALTH_GRID_SIZE).reverse();
   const healthCells: (VolumeBackup | undefined)[] = [
@@ -302,34 +368,62 @@ export const ContainersComponent = ({ contentHeight, workspace, canManageBackups
     <div className="flex gap-3" style={{ height: contentHeight }}>
       <div className="w-[260px] shrink-0 overflow-y-auto rounded bg-white p-2 shadow dark:bg-gray-800">
         {containers.length === 0 ? (
-          <div className="p-3 text-sm text-gray-500 dark:text-gray-400">
-            No running containers found.
-          </div>
+          <div className="p-3 text-sm text-gray-500 dark:text-gray-400">No containers found.</div>
         ) : (
-          containers.map((container) => (
-            <button
-              type="button"
-              key={container.id}
-              onClick={() => selectContainer(container)}
-              className={`mb-2 w-full rounded p-2 text-left ${
-                container.id === selectedContainerId
-                  ? 'bg-blue-50 dark:bg-gray-700'
-                  : 'hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-            >
-              <div className="flex items-center gap-1 font-medium text-black dark:text-gray-100">
-                {container.name}
-                {scheduledContainerNames.has(container.name) && (
-                  <ClockCircleOutlined className="text-blue-500" title="Scheduled backup" />
-                )}
-              </div>
-              <div className="truncate text-xs text-gray-500 dark:text-gray-400">
-                {container.image}
-              </div>
-              <div className="mt-1 text-xs text-gray-400">
-                {container.state} - {container.mounts.length} mounts
-              </div>
-            </button>
+          containerGroups.map((group) => (
+            <div key={group.label}>
+              <Divider orientation="left" plain className="!my-2 !text-xs !text-gray-400">
+                {group.label} ({group.items.length})
+              </Divider>
+              {group.items.map((container) => {
+                const summary = backupSummaries.get(container.name);
+
+                return (
+                  <button
+                    type="button"
+                    key={container.id}
+                    onClick={() => selectContainer(container)}
+                    className={`mb-2 w-full rounded p-2 text-left ${
+                      container.id === selectedContainerId
+                        ? 'bg-blue-50 dark:bg-gray-700'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-black dark:text-gray-100">
+                          {container.name}
+                        </div>
+                        <div className="truncate text-xs text-gray-500 dark:text-gray-400">
+                          {container.image}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+                          <Badge
+                            status={stateBadgeStatus(container.state)}
+                            text={container.state}
+                          />
+                          <span>{container.mounts.length} mounts</span>
+                        </div>
+                        {summary && (
+                          <div className="mt-0.5 truncate text-xs text-gray-400">
+                            {summary.storageName ? `${summary.storageName} - ` : ''}last backup{' '}
+                            {relativeTimeFrom(summary.lastBackupAt)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                        {summary && (
+                          <SaveOutlined className="text-green-500" title="Backups available" />
+                        )}
+                        {scheduledContainerNames.has(container.name) && (
+                          <ClockCircleOutlined className="text-blue-500" title="Scheduled backup" />
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           ))
         )}
       </div>
@@ -342,94 +436,123 @@ export const ContainersComponent = ({ contentHeight, workspace, canManageBackups
             <div className="mb-1 text-lg font-medium text-black dark:text-gray-100">
               {selectedContainer.name}
             </div>
-            <div className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+            <div className="mb-3 text-xs text-gray-500 dark:text-gray-400">
               {selectedContainer.image}
             </div>
 
-            <div className="mb-2 font-medium text-black dark:text-gray-200">Mounts</div>
-            <div className="mb-4">
-              {selectedContainer.mounts.map((mount) => (
-                <div key={mount.destination} className="mb-1">
-                  <Checkbox
-                    disabled={!mount.isBackupCandidate || !canManageBackups}
-                    checked={selectedMountPaths.includes(mount.destination)}
-                    onChange={() => toggleMountPath(mount.destination)}
-                  >
-                    <span className="text-black dark:text-gray-200">{mount.destination}</span>
-                    <span className="ml-2 text-xs text-gray-400">
-                      ({mount.type}
-                      {mount.isBackupCandidate ? '' : ', infrastructure'})
-                    </span>
-                  </Checkbox>
-                </div>
-              ))}
-            </div>
+            <Tabs
+              items={[
+                {
+                  key: 'config',
+                  label: 'Config',
+                  children: (
+                    <>
+                      <div className="mb-2 font-medium text-black dark:text-gray-200">Mounts</div>
+                      <div className="mb-4">
+                        {selectedContainer.mounts.map((mount) => (
+                          <div key={mount.destination} className="mb-1">
+                            <Checkbox
+                              disabled={!mount.isBackupCandidate || !canManageBackups}
+                              checked={selectedMountPaths.includes(mount.destination)}
+                              onChange={() => toggleMountPath(mount.destination)}
+                            >
+                              <span className="text-black dark:text-gray-200">
+                                {mount.destination}
+                              </span>
+                              <span className="ml-2 text-xs text-gray-400">
+                                ({mount.type}
+                                {mount.isBackupCandidate ? '' : ', infrastructure'})
+                              </span>
+                            </Checkbox>
+                          </div>
+                        ))}
+                      </div>
 
-            <div className="mb-4 flex items-center gap-3">
-              <span className="text-black dark:text-gray-200">Target storage</span>
-              <Select
-                value={selectedStorageId}
-                onChange={setSelectedStorageId}
-                className="min-w-[200px]"
-                placeholder="Select storage"
-                options={storages.map((storage) => ({ label: storage.name, value: storage.id }))}
-              />
-              <span className="text-black dark:text-gray-200">Consistency</span>
-              <Select
-                value={consistency}
-                onChange={setConsistency}
-                className="min-w-[180px]"
-                options={consistencyOptions}
-              />
-              <span className="text-black dark:text-gray-200">Encrypt</span>
-              <Switch checked={isEncrypted} onChange={setIsEncrypted} />
-              <Button
-                type="primary"
-                loading={isBackingUp}
-                disabled={
-                  !canManageBackups || !selectedStorageId || selectedMountPaths.length === 0
-                }
-                onClick={backupNow}
-              >
-                Back up now
-              </Button>
-            </div>
+                      <div className="mb-4 flex flex-wrap items-center gap-3">
+                        <span className="text-black dark:text-gray-200">Target storage</span>
+                        <Select
+                          value={selectedStorageId}
+                          onChange={setSelectedStorageId}
+                          className="min-w-[200px]"
+                          placeholder="Select storage"
+                          options={storages.map((storage) => ({
+                            label: storage.name,
+                            value: storage.id,
+                          }))}
+                        />
+                        <span className="text-black dark:text-gray-200">Consistency</span>
+                        <Select
+                          value={consistency}
+                          onChange={setConsistency}
+                          className="min-w-[180px]"
+                          options={consistencyOptions}
+                        />
+                        <span className="text-black dark:text-gray-200">Encrypt</span>
+                        <Switch checked={isEncrypted} onChange={setIsEncrypted} />
+                        <Button
+                          type="primary"
+                          loading={isBackingUp}
+                          disabled={
+                            !canManageBackups ||
+                            !selectedStorageId ||
+                            selectedMountPaths.length === 0
+                          }
+                          onClick={backupNow}
+                        >
+                          Back up now
+                        </Button>
+                      </div>
 
-            <ScheduleComponent
-              key={selectedContainer.name}
-              containerName={selectedContainer.name}
-              mountPaths={selectedMountPaths}
-              storageId={selectedStorageId}
-              config={selectedConfig}
-              canManage={canManageBackups}
-              onChanged={reloadConfigs}
-            />
+                      <ScheduleComponent
+                        key={selectedContainer.name}
+                        containerName={selectedContainer.name}
+                        availableMounts={selectedContainer.mounts
+                          .filter((mount) => mount.isBackupCandidate)
+                          .map((mount) => mount.destination)}
+                        storageId={selectedStorageId}
+                        config={selectedConfig}
+                        canManage={canManageBackups}
+                        onChanged={reloadConfigs}
+                      />
+                    </>
+                  ),
+                },
+                {
+                  key: 'backups',
+                  label: 'Backups',
+                  children: (
+                    <>
+                      <div className="mb-4">
+                        <div className="mb-1 font-medium text-black dark:text-gray-200">
+                          Backup health
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {healthCells.map((backup, index) => (
+                            <div
+                              key={backup ? backup.id : `empty-${index}`}
+                              title={
+                                backup
+                                  ? `${new Date(backup.createdAt).toLocaleString()} - ${backup.status}`
+                                  : 'No backup yet'
+                              }
+                              className={`h-3 w-3 rounded-sm ${healthCellClass(backup)}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
 
-            <div className="mb-4">
-              <div className="mb-1 font-medium text-black dark:text-gray-200">Backup health</div>
-              <div className="flex flex-wrap gap-1">
-                {healthCells.map((backup, index) => (
-                  <div
-                    key={backup ? backup.id : `empty-${index}`}
-                    title={
-                      backup
-                        ? `${new Date(backup.createdAt).toLocaleString()} - ${backup.status}`
-                        : 'No backup yet'
-                    }
-                    className={`h-3 w-3 rounded-sm ${healthCellClass(backup)}`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-2 font-medium text-black dark:text-gray-200">Backups</div>
-            <Table
-              rowKey="id"
-              size="small"
-              pagination={false}
-              dataSource={backups}
-              columns={backupColumns}
-              locale={{ emptyText: 'No backups yet' }}
+                      <Table
+                        rowKey="id"
+                        size="small"
+                        pagination={false}
+                        dataSource={backups}
+                        columns={backupColumns}
+                        locale={{ emptyText: 'No backups yet' }}
+                      />
+                    </>
+                  ),
+                },
+              ]}
             />
           </>
         )}

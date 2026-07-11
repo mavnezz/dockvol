@@ -1,6 +1,10 @@
 package docker
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type CreateBackupRequestDTO struct {
 	ContainerID string          `json:"containerId" binding:"required"`
@@ -8,4 +12,10 @@ type CreateBackupRequestDTO struct {
 	MountPaths  []string        `json:"mountPaths"  binding:"required"`
 	Consistency ConsistencyMode `json:"consistency"`
 	IsEncrypted bool            `json:"isEncrypted"`
+}
+
+type ContainerBackupSummary struct {
+	ContainerName string    `json:"containerName"`
+	LastBackupAt  time.Time `json:"lastBackupAt"`
+	StorageName   string    `json:"storageName"`
 }

@@ -86,6 +86,49 @@ func Test_DeleteBackup_RemovesTheRecord(t *testing.T) {
 	assert.Empty(t, response.Backups)
 }
 
+type containerBackupSummariesResponse struct {
+	Containers []docker.ContainerBackupSummary `json:"containers"`
+}
+
+func Test_GetContainerBackupSummaries_ReturnsLatestBackupPerContainer(t *testing.T) {
+	database := testutil.SetupDb(t)
+	router := testutil.NewRouter()
+	user := testutil.SignUpTestUser(t, router)
+
+	now := time.Now().UTC()
+	newestMinioBackup := now
+	for _, seed := range []struct {
+		containerName string
+		fileName      string
+		createdAt     time.Time
+	}{
+		{"minio", "minio-old.tar.gz", now.Add(-2 * time.Hour)},
+		{"minio", "minio-new.tar.gz", newestMinioBackup},
+		{"vector", "vector.tar.gz", now.Add(-time.Hour)},
+	} {
+		require.NoError(t, database.Create(&docker.VolumeBackup{
+			ID: uuid.New(), ContainerID: "c", ContainerName: seed.containerName, MountPaths: []string{"/data"},
+			StorageID: uuid.New(), Status: docker.BackupStatusCompleted, FileName: seed.fileName,
+			CreatedAt: seed.createdAt,
+		}).Error)
+	}
+
+	var response containerBackupSummariesResponse
+	testutil.MakeGetAndUnmarshal(
+		t, router, "/api/v1/docker/backed-up-containers", user.Token, http.StatusOK, &response,
+	)
+
+	require.Len(t, response.Containers, 2)
+
+	summariesByName := make(map[string]docker.ContainerBackupSummary)
+	for _, summary := range response.Containers {
+		summariesByName[summary.ContainerName] = summary
+	}
+	require.Contains(t, summariesByName, "minio")
+	require.Contains(t, summariesByName, "vector")
+	assert.WithinDuration(t, newestMinioBackup, summariesByName["minio"].LastBackupAt, time.Second)
+}
+
 type configsResponse struct {
 	Configs []docker.VolumeBackupConfig `json:"configs"`
 }

@@ -30,7 +30,9 @@ func listContainers(ctx context.Context) ([]container.Summary, error) {
 		return nil, err
 	}
 
-	result, err := cli.ContainerList(ctx, client.ContainerListOptions{All: false})
+	// All: true keeps paused and stopped containers in the list — a container
+	// stopped for a STOP-consistency backup must not vanish from the UI mid-run.
+	result, err := cli.ContainerList(ctx, client.ContainerListOptions{All: true})
 	if err != nil {
 		return nil, err
 	}
