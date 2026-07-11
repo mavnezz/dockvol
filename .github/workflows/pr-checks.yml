@@ -1,0 +1,109 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+          cache-dependency-path: backend/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      # The docker feature tests talk to the Docker socket, which ubuntu-latest
+      # runners provide; ENV_MODE=development matches the Makefile target.
+      - name: Test
+        run: go test -race -count=1 ./...
+        env:
+          ENV_MODE: development
+
+      - name: go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      # golangci-lint v2 reports the configured formatters (gofumpt, golines) as
+      # findings, so run doubles as the format gate.
+      - name: Lint and format
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.3
+          working-directory: backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # working-directory does not apply to action steps, so point pnpm at
+          # the frontend package.json to read its packageManager version.
+          package_json_file: frontend/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format
+        run: pnpm exec prettier --check "**/*.{ts,tsx,js,jsx,json,css,md}"
+
+      - name: Typecheck and build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency and Dockerfile scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: '1'

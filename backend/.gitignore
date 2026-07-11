@@ -1,0 +1,7 @@
+main
+.env
+pgdata_test/
+ui/build/*
+pgdata-for-restore/
+temp/
+temp/

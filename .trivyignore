@@ -1,0 +1,13 @@
+# Trivy misconfiguration findings ignored for this repo.
+# See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/
+#
+# DS-0002 — "Specify at least 1 USER command in Dockerfile with non-root user as argument"
+#
+# Suppressed for `Dockerfile`: the image intentionally ships no USER directive
+# because the entrypoint must start as root to
+#   - chown the mounted /dockvol-data volume on first boot, and
+#   - match the host Docker socket's group GID at runtime and add the dockvol
+#     user to that group so the non-root app can read /var/run/docker.sock.
+# It then drops privileges to the non-root dockvol user (UID 65532) via
+# `exec gosu dockvol ./main` at the end of start.sh, so the app never runs as root.
+DS-0002

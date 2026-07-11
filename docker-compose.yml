@@ -1,0 +1,24 @@
+services:
+  # DockVol standalone image — build from source and run.
+  #   docker compose up -d --build
+  #
+  # Mounts the host Docker socket so DockVol can discover containers and spawn
+  # the read-only tar-sidecar that reads their volumes. This grants full Docker
+  # API access to the host, which is inherent to how volume backups work.
+  dockvol-local:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4005:4005"
+    volumes:
+      - ./dockvol-data:/dockvol-data
+      - /var/run/docker.sock:/var/run/docker.sock
+    container_name: dockvol-local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "dockvol", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

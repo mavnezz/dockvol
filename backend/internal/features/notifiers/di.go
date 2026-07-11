@@ -1,0 +1,42 @@
+package notifiers
+
+import (
+	"sync"
+
+	audit_logs "dockvol-backend/internal/features/audit_logs"
+	workspaces_services "dockvol-backend/internal/features/workspaces/services"
+	"dockvol-backend/internal/util/encryption"
+	"dockvol-backend/internal/util/logger"
+)
+
+var (
+	notifierRepository = &NotifierRepository{}
+	notifierService    = &NotifierService{
+		notifierRepository,
+		logger.GetLogger(),
+		workspaces_services.GetWorkspaceService(),
+		audit_logs.GetAuditLogService(),
+		encryption.GetFieldEncryptor(),
+	}
+)
+
+var notifierController = &NotifierController{
+	notifierService,
+	workspaces_services.GetWorkspaceService(),
+}
+
+func GetNotifierController() *NotifierController {
+	return notifierController
+}
+
+func GetNotifierService() *NotifierService {
+	return notifierService
+}
+
+func GetNotifierRepository() *NotifierRepository {
+	return notifierRepository
+}
+
+var SetupDependencies = sync.OnceFunc(func() {
+	workspaces_services.GetWorkspaceService().AddWorkspaceDeletionListener(notifierService)
+})

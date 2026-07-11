@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DockVol">
+  <defs>
+    <linearGradient id="dvFav" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3aa0f2"/>
+      <stop offset="1" stop-color="#0d5fc0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="url(#dvFav)"/>
+
+  <!-- bold volume cylinder for small sizes -->
+  <g fill="#ffffff">
+    <rect x="15" y="18" width="34" height="28"/>
+    <ellipse cx="32" cy="46" rx="17" ry="6"/>
+    <ellipse cx="32" cy="18" rx="17" ry="6"/>
+  </g>
+  <g fill="none" stroke="#5aa9ec" stroke-width="2.4" stroke-linecap="round">
+    <path d="M15 28 A17 6 0 0 0 49 28"/>
+    <path d="M15 37 A17 6 0 0 0 49 37"/>
+  </g>
+</svg>
