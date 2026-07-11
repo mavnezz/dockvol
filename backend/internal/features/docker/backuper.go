@@ -97,6 +97,43 @@ func (b *Backuper) ListBackups(containerID string) ([]VolumeBackup, error) {
 	return b.backupRepository.List(containerID)
 }
 
+func (b *Backuper) GetContainerBackupSummaries() ([]ContainerBackupSummary, error) {
+	backups, err := b.backupRepository.List("")
+	if err != nil {
+		return nil, err
+	}
+
+	storageNames := make(map[uuid.UUID]string)
+	summarizedContainerNames := make(map[string]bool)
+	summaries := make([]ContainerBackupSummary, 0)
+
+	// List returns backups newest-first, so the first row for a container name is
+	// its most recent backup.
+	for i := range backups {
+		if summarizedContainerNames[backups[i].ContainerName] {
+			continue
+		}
+		summarizedContainerNames[backups[i].ContainerName] = true
+
+		storageID := backups[i].StorageID
+		storageName, resolved := storageNames[storageID]
+		if !resolved {
+			if targetStorage, storageErr := b.storageService.GetStorageByID(storageID); storageErr == nil {
+				storageName = targetStorage.Name
+			}
+			storageNames[storageID] = storageName
+		}
+
+		summaries = append(summaries, ContainerBackupSummary{
+			ContainerName: backups[i].ContainerName,
+			LastBackupAt:  backups[i].CreatedAt,
+			StorageName:   storageName,
+		})
+	}
+
+	return summaries, nil
+}
+
 // OpenBackup's caller must close the returned reader.
 func (b *Backuper) OpenBackup(id uuid.UUID) (*VolumeBackup, io.ReadCloser, error) {
 	volumeBackup, err := b.backupRepository.FindByID(id)

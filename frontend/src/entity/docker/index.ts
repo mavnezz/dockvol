@@ -1,6 +1,7 @@
 export { dockerApi } from './api/dockerApi';
 export type { Container } from './models/Container';
 export type { ContainerMount } from './models/ContainerMount';
+export type { ContainerBackupSummary } from './models/ContainerBackupSummary';
 export type { BackupStatus } from './models/BackupStatus';
 export type { VolumeBackup } from './models/VolumeBackup';
 export type { CreateBackupRequest } from './models/CreateBackupRequest';

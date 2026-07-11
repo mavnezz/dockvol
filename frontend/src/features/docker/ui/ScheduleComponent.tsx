@@ -11,7 +11,7 @@ import { consistencyOptions } from '../lib/consistencyOptions';
 
 interface Props {
   containerName: string;
-  mountPaths: string[];
+  availableMounts: string[];
   storageId: string | undefined;
   config: VolumeBackupConfig | undefined;
   canManage: boolean;
@@ -35,7 +35,7 @@ const retentionOptions = [
 
 export const ScheduleComponent = ({
   containerName,
-  mountPaths,
+  availableMounts,
   storageId,
   config,
   canManage,
@@ -43,6 +43,9 @@ export const ScheduleComponent = ({
 }: Props) => {
   const { message } = App.useApp();
 
+  const [scheduleMountPaths, setScheduleMountPaths] = useState<string[]>(
+    config?.mountPaths ?? availableMounts,
+  );
   const [backupInterval, setBackupInterval] = useState<BackupInterval>(config?.interval ?? 'DAILY');
   const [timeOfDay, setTimeOfDay] = useState(config?.timeOfDay ?? '04:00');
   const [retentionDays, setRetentionDays] = useState(config?.retentionDays ?? 30);
@@ -56,7 +59,7 @@ export const ScheduleComponent = ({
       message.error('Select a target storage first');
       return;
     }
-    if (mountPaths.length === 0) {
+    if (scheduleMountPaths.length === 0) {
       message.error('Select at least one mount first');
       return;
     }
@@ -66,7 +69,7 @@ export const ScheduleComponent = ({
       await dockerApi.saveConfig({
         id: config?.id,
         containerName,
-        mountPaths,
+        mountPaths: scheduleMountPaths,
         storageId,
         interval: backupInterval,
         timeOfDay,
@@ -101,6 +104,17 @@ export const ScheduleComponent = ({
     <div className="mb-4 rounded border border-gray-200 p-3 dark:border-gray-700">
       <div className="mb-2 font-medium text-black dark:text-gray-200">Schedule</div>
       <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 dark:text-gray-400">Mounts</span>
+          <Select
+            mode="multiple"
+            value={scheduleMountPaths}
+            onChange={setScheduleMountPaths}
+            options={availableMounts.map((path) => ({ label: path, value: path }))}
+            placeholder="Select mounts"
+            className="min-w-[200px]"
+          />
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-gray-500 dark:text-gray-400">Interval</span>
           <Select

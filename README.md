@@ -106,7 +106,7 @@ Create a `docker-compose.yml` file with the following configuration:
 services:
   dockvol:
     container_name: dockvol
-    image: dockvol/dockvol:latest
+    image: ghcr.io/mavnezz/dockvol:latest
     ports:
       - "4005:4005"
     volumes:

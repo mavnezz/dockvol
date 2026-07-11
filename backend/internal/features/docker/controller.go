@@ -21,6 +21,7 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 	dockerRoutes.GET("/containers", c.GetContainers)
 	dockerRoutes.POST("/backup", c.CreateBackup)
 	dockerRoutes.GET("/backups", c.GetBackups)
+	dockerRoutes.GET("/backed-up-containers", c.GetContainerBackupSummaries)
 	dockerRoutes.GET("/backups/:id/download", c.DownloadBackup)
 	dockerRoutes.POST("/backups/:id/restore", c.RestoreBackup)
 	dockerRoutes.DELETE("/backups/:id", c.DeleteBackup)
@@ -32,7 +33,7 @@ func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
 
 // GetContainers
 // @Summary List Docker containers with their mounts
-// @Description List running containers on the host and the mounts eligible for backup
+// @Description List containers on the host (running, paused and stopped) and the mounts eligible for backup
 // @Tags docker
 // @Produce json
 // @Param Authorization header string true "JWT token"
@@ -105,6 +106,26 @@ func (c *Controller) GetBackups(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"backups": volumeBackups})
+}
+
+// GetContainerBackupSummaries
+// @Summary Per-container backup summary (latest backup time and target storage)
+// @Description For at-a-glance list cards: the most recent backup time and storage name for each container that has a backup
+// @Tags docker
+// @Produce json
+// @Param Authorization header string true "JWT token"
+// @Success 200 {object} map[string][]ContainerBackupSummary
+// @Failure 401
+// @Failure 500
+// @Router /docker/backed-up-containers [get]
+func (c *Controller) GetContainerBackupSummaries(ctx *gin.Context) {
+	summaries, err := c.backuper.GetContainerBackupSummaries()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list container backup summaries"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"containers": summaries})
 }
 
 // DownloadBackup
